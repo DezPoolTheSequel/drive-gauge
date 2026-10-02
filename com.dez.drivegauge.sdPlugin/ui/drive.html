@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Drive Gauge</title>
+<style>
+  :root {
+    --bg: #2d2d2d; --field: #3d3d3d; --field-hi: #464646; --text: #d8d8d8; --muted: #969696;
+    --accent: #0078ff; --ok: #3ddc84; --bad: #ff6b6b; --line: #3a3a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 9pt "Segoe UI", system-ui, sans-serif; }
+  body { padding: 4px 14px 16px 6px; }
+  .row { display: flex; align-items: center; min-height: 30px; margin: 3px 0; }
+  .row > label:first-child { flex: 0 0 104px; text-align: right; padding-right: 10px; color: var(--muted); }
+  .row > .ctl { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  select, input[type=text], input[type=number] {
+    width: 100%; height: 26px; background: var(--field); color: var(--text); border: 0; border-radius: 3px;
+    padding: 0 6px; font: inherit; outline: none;
+  }
+  select:focus, input:focus { background: var(--field-hi); }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  input[type=color] { width: 34px; height: 24px; border: 0; padding: 0; background: none; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+  .val { width: 30px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hex { width: 76px !important; flex: 0 0 76px; font-family: Consolas, monospace; }
+  button {
+    height: 26px; min-width: 30px; background: var(--field); color: var(--text); border: 0; border-radius: 3px;
+    font: inherit; cursor: pointer; padding: 0 8px;
+  }
+  button:hover { background: var(--field-hi); }
+  .hint { margin: -1px 0 6px 114px; color: var(--muted); font-size: 8pt; line-height: 1.35; }
+  .status { margin: 2px 0 8px 114px; font-size: 8pt; line-height: 1.35; color: var(--muted); word-break: break-all; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+  details { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 4px; }
+  summary { cursor: pointer; padding: 6px 0 6px 14px; color: var(--text); font-weight: 600; list-style: none; }
+  summary::before { content: "▸ "; color: var(--muted); }
+  details[open] > summary::before { content: "▾ "; }
+  .hidden { display: none !important; }
+  .unit { color: var(--muted); width: 22px; }
+</style>
+</head>
+<body>
+
+<!-- ======================= SOURCE ======================= -->
+<div class="row">
+  <label>Source</label>
+  <div class="ctl">
+    <select data-key="source">
+      <option value="drive">Drive letter (local or mapped)</option>
+      <option value="custom">Network share / custom path</option>
+    </select>
+  </div>
+</div>
+
+<div class="row" id="rowDrive">
+  <label>Drive</label>
+  <div class="ctl">
+    <select id="drive"><option value="">Loading drives…</option></select>
+    <button id="btnReload" title="Re-scan drives">↻</button>
+  </div>
+</div>
+
+<div class="row hidden" id="rowCustom">
+  <label>Path</label>
+  <div class="ctl"><input type="text" data-key="customPath" placeholder="\\NAS\media  or  D:\Games" spellcheck="false" /></div>
+</div>
+<div class="hint hidden" id="hintCustom">Any UNC share works even if it isn't mapped to a letter.</div>
+
+<div class="status" id="status">Waiting for plugin…</div>
+
+<!-- ======================= DISPLAY ======================= -->
+<div class="row">
+  <label>Style</label>
+  <div class="ctl">
+    <select data-key="style">
+      <option value="ring">Ring</option>
+      <option value="arc">Arc gauge (270°)</option>
+      <option value="pie">Pie</option>
+      <option value="bar">Bar (horizontal)</option>
+      <option value="vbar">Bar (vertical)</option>
+      <option value="text">Text only</option>
+    </select>
+  </div>
+</div>
+
+<div class="row">
+  <label>Show</label>
+  <div class="ctl">
+    <select data-key="metric">
+      <option value="used">Used space</option>
+      <option value="free">Free space</option>
+    </select>
+    <select data-key="value">
+      <option value="percent">as %</option>
+      <option value="size">as size</option>
+      <option value="none">no number</option>
+    </select>
+  </div>
+</div>
+
+<div class="row">
+  <label>Bottom line</label>
+  <div class="ctl">
+    <select data-key="sub">
+      <option value="usedTotal">Used / Total (1.6 / 1.8 TB)</option>
+      <option value="freeTotal">Free / Total</option>
+      <option value="free">Free (2.35 TB free)</option>
+      <option value="used">Used</option>
+      <option value="total">Total</option>
+      <option value="percent">Percentage</option>
+      <option value="none">Nothing</option>
+    </select>
+  </div>
+</div>
+
+<div class="row">
+  <label>Label</label>
+  <div class="ctl">
+    <input type="text" data-key="label" placeholder="automatic (drive letter)" />
+    <input type="checkbox" data-key="showLabel" title="Show label" />
+  </div>
+</div>
+
+<div class="row">
+  <label>Units</label>
+  <div class="ctl">
+    <select data-key="units">
+      <option value="binary">Like Windows Explorer</option>
+      <option value="decimal">Like the drive box (1 TB = 10¹²)</option>
+    </select>
+    <select data-key="decimals" style="flex:0 0 76px">
+      <option value="auto">Auto</option>
+      <option value="0">0 dp</option>
+      <option value="1">1 dp</option>
+      <option value="2">2 dp</option>
+    </select>
+  </div>
+</div>
+
+<!-- ======================= FONTS ======================= -->
+<details open>
+  <summary>Fonts</summary>
+  <div class="row">
+    <label>Font</label>
+    <div class="ctl">
+      <select id="fontPick">
+        <option>Segoe UI</option>
+        <option>Segoe UI Semibold</option>
+        <option>Segoe UI Black</option>
+        <option>Bahnschrift</option>
+        <option>Bahnschrift Condensed</option>
+        <option>Arial</option>
+        <option>Arial Black</option>
+        <option>Arial Narrow</option>
+        <option>Calibri</option>
+        <option>Candara</option>
+        <option>Consolas</option>
+        <option>Cascadia Code</option>
+        <option>Cascadia Mono</option>
+        <option>Courier New</option>
+        <option>Franklin Gothic Medium</option>
+        <option>Georgia</option>
+        <option>Impact</option>
+        <option>Lucida Console</option>
+        <option>Tahoma</option>
+        <option>Trebuchet MS</option>
+        <option>Verdana</option>
+        <option value="__custom">Custom…</option>
+      </select>
+      <select data-key="fontWeight" style="flex:0 0 76px">
+        <option value="bold">Bold</option>
+        <option value="normal">Normal</option>
+      </select>
+    </div>
+  </div>
+  <div class="row hidden" id="rowFontCustom">
+    <label>Font name</label>
+    <div class="ctl"><input type="text" id="fontCustom" placeholder="Any installed font, e.g. JetBrains Mono" spellcheck="false" /></div>
+  </div>
+  <div class="row"><label>Value size</label><div class="ctl"><input type="range" min="8" max="64" data-key="valueSize" /><span class="val"></span></div></div>
+  <div class="row"><label>Label size</label><div class="ctl"><input type="range" min="0" max="40" data-key="labelSize" /><span class="val"></span></div></div>
+  <div class="row"><label>Bottom size</label><div class="ctl"><input type="range" min="0" max="30" data-key="subSize" /><span class="val"></span></div></div>
+  <div class="row"><label>Value offset</label><div class="ctl"><input type="range" min="-30" max="30" data-key="valueOffset" /><span class="val"></span></div></div>
+</details>
+
+<!-- ======================= COLOURS ======================= -->
+<details open>
+  <summary>Colours</summary>
+  <div class="row">
+    <label>Preset</label>
+    <div class="ctl">
+      <select id="preset">
+        <option value="">Apply a preset…</option>
+        <option value="mint">Mint (default)</option>
+        <option value="ocean">Ocean</option>
+        <option value="sunset">Sunset</option>
+        <option value="neon">Neon pink</option>
+        <option value="mono">Mono</option>
+        <option value="amber">Amber terminal</option>
+      </select>
+    </div>
+  </div>
+  <div class="row"><label>Background</label><div class="ctl" data-color="bgColor"></div></div>
+  <div class="row"><label>Track</label><div class="ctl" data-color="trackColor"></div></div>
+  <div class="row"><label>Fill</label><div class="ctl" data-color="fillColor"></div></div>
+  <div class="row">
+    <label>Value colour</label>
+    <div class="ctl">
+      <select data-key="valueColorMode" style="flex:0 0 120px">
+        <option value="match">Match fill</option>
+        <option value="fixed">Fixed →</option>
+      </select>
+      <span data-color="valueColor" style="display:flex;gap:6px;align-items:center;flex:1"></span>
+    </div>
+  </div>
+  <div class="row"><label>Label</label><div class="ctl" data-color="labelColor"></div></div>
+  <div class="row"><label>Bottom line</label><div class="ctl" data-color="subColor"></div></div>
+  <div class="row"><label>Warning</label><div class="ctl" data-color="warnColor"></div></div>
+  <div class="row"><label>Alert</label><div class="ctl" data-color="alertColor"></div></div>
+</details>
+
+<!-- ======================= ALERTS ======================= -->
+<details open>
+  <summary>Low-space alerts</summary>
+  <div class="row">
+    <label>Measure free</label>
+    <div class="ctl">
+      <select data-key="thresholdUnit">
+        <option value="percent">in %</option>
+        <option value="gb">in GB</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <label>Warn below</label>
+    <div class="ctl"><input type="number" min="0" step="1" data-key="warnBelow" /><span class="unit thrUnit">%</span></div>
+  </div>
+  <div class="row">
+    <label>Alert below</label>
+    <div class="ctl"><input type="number" min="0" step="1" data-key="alertBelow" /><span class="unit thrUnit">%</span></div>
+  </div>
+  <div class="hint">Fill switches to the warning / alert colour when free space drops below these. 0 disables.</div>
+  <div class="row">
+    <label>Alert frame</label>
+    <div class="ctl">
+      <select data-key="frame">
+        <option value="flash">Flashing</option>
+        <option value="solid">Solid</option>
+        <option value="off">Off</option>
+      </select>
+    </div>
+  </div>
+</details>
+
+<!-- ======================= SHAPE & BEHAVIOUR ======================= -->
+<details>
+  <summary>Shape &amp; behaviour</summary>
+  <div class="row"><label>Thickness</label><div class="ctl"><input type="range" min="2" max="30" data-key="thickness" /><span class="val"></span></div></div>
+  <div class="row"><label>Gauge size</label><div class="ctl"><input type="range" min="40" max="130" step="5" data-key="scale" /><span class="val"></span></div></div>
+  <div class="row"><label>Rounded ends</label><div class="ctl"><input type="checkbox" data-key="roundCaps" /></div></div>
+  <div class="row">
+    <label>Update every</label>
+    <div class="ctl">
+      <select data-key="refresh">
+        <option value="10">10 seconds</option>
+        <option value="30">30 seconds</option>
+        <option value="60">1 minute</option>
+        <option value="120">2 minutes</option>
+        <option value="300">5 minutes</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <label>Key press</label>
+    <div class="ctl">
+      <select data-key="press">
+        <option value="open">Open drive in Explorer</option>
+        <option value="refresh">Refresh now</option>
+        <option value="cycle">Cycle used% / free% / used / free</option>
+      </select>
+    </div>
+  </div>
+</details>
+
+<script>
+  // Must mirror src/settings.ts DEFAULTS
+  const DEFAULTS = {
+    source: "drive", drive: "C:", unc: "", driveType: "", driveLabel: "", customPath: "",
+    metric: "used", value: "percent", sub: "usedTotal", style: "ring", label: "", showLabel: true,
+    units: "binary", decimals: "auto",
+    fontFamily: "Segoe UI", fontWeight: "bold", valueSize: 30, labelSize: 20, subSize: 13, valueOffset: 0,
+    bgColor: "#101318", trackColor: "#2B313B", fillColor: "#3DDC84", valueColorMode: "match", valueColor: "#FFFFFF",
+    labelColor: "#D7DCE3", subColor: "#8A94A3", warnColor: "#F4C542", alertColor: "#FF4D5E",
+    thresholdUnit: "percent", warnBelow: 20, alertBelow: 10, frame: "flash",
+    thickness: 12, scale: 100, roundCaps: true, refresh: 30, press: "open"
+  };
+
+  const PRESETS = {
+    mint:   { bgColor: "#101318", trackColor: "#2B313B", fillColor: "#3DDC84", labelColor: "#D7DCE3", subColor: "#8A94A3", valueColor: "#FFFFFF" },
+    ocean:  { bgColor: "#0B1622", trackColor: "#1C2E42", fillColor: "#36A3FF", labelColor: "#CFE6FF", subColor: "#6E8BA8", valueColor: "#FFFFFF" },
+    sunset: { bgColor: "#1A1014", trackColor: "#3A2229", fillColor: "#FF8A3D", labelColor: "#FFE0CC", subColor: "#B07F6C", valueColor: "#FFFFFF" },
+    neon:   { bgColor: "#16070F", trackColor: "#3A1426", fillColor: "#FF3D7F", labelColor: "#E6E6E6", subColor: "#8E6F7D", valueColor: "#FFFFFF" },
+    mono:   { bgColor: "#000000", trackColor: "#2A2A2A", fillColor: "#FFFFFF", labelColor: "#BBBBBB", subColor: "#777777", valueColor: "#FFFFFF" },
+    amber:  { bgColor: "#0D0A00", trackColor: "#2E2300", fillColor: "#FFB000", labelColor: "#FFCF66", subColor: "#A07A20", valueColor: "#FFB000" }
+  };
+
+  let ws, ctx, actionUUID, settings = {}, drives = [];
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+
+  // ---------------------------------------------------------------- Stream Deck connection
+  window.connectElgatoStreamDeckSocket = function (port, uuid, registerEvent, info, actionInfo) {
+    ctx = uuid;
+    const ai = JSON.parse(actionInfo);
+    actionUUID = ai.action;
+    settings = Object.assign({}, DEFAULTS, ai.payload.settings || {});
+    buildColorControls();
+    fillForm();
+
+    ws = new WebSocket("ws://127.0.0.1:" + port);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ event: registerEvent, uuid }));
+      // persist defaults on first use so the plugin & PI agree
+      save();
+      sendToPlugin({ cmd: "listDrives" });
+      sendToPlugin({ cmd: "refresh" });
+    };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "didReceiveSettings") {
+        settings = Object.assign({}, DEFAULTS, msg.payload.settings || {});
+        fillForm();
+      } else if (msg.event === "sendToPropertyInspector") {
+        const p = msg.payload || {};
+        if (p.event === "drives") { drives = p.drives || []; renderDrives(p.error); }
+        if (p.event === "status") {
+          const el = $("#status");
+          el.textContent = p.status;
+          el.className = "status " + (p.ok ? "ok" : "bad");
+        }
+      }
+    };
+  };
+
+  function save() {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event: "setSettings", context: ctx, payload: settings }));
+  }
+  function sendToPlugin(payload) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ event: "sendToPlugin", action: actionUUID, context: ctx, payload }));
+  }
+  let saveTimer;
+  function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 120); }
+
+  // ---------------------------------------------------------------- drives
+  function fmt(bytes) {
+    if (!bytes) return "";
+    const u = ["B", "KB", "MB", "GB", "TB", "PB"]; let i = 0, v = bytes;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0) + " " + u[i];
+  }
+
+  function renderDrives(error) {
+    const sel = $("#drive");
+    sel.innerHTML = "";
+    const groups = { network: "Network (mapped)", local: "Local", removable: "Removable", optical: "Optical", ram: "RAM disk", unknown: "Other" };
+    const byType = {};
+    drives.forEach((d) => (byType[d.type] = byType[d.type] || []).push(d));
+
+    // keep the saved drive visible even if it's offline right now
+    if (settings.drive && !drives.some((d) => d.letter.toUpperCase() === settings.drive.toUpperCase())) {
+      const og = document.createElement("optgroup"); og.label = "Saved (not found now)";
+      og.appendChild(new Option(settings.drive + (settings.unc ? "  " + settings.unc : "") + "  — offline", settings.drive));
+      sel.appendChild(og);
+    }
+    for (const t of ["network", "local", "removable", "optical", "ram", "unknown"]) {
+      if (!byType[t]) continue;
+      const og = document.createElement("optgroup"); og.label = groups[t];
+      for (const d of byType[t]) {
+        let text = d.letter;
+        if (d.label) text += "  " + d.label;
+        if (d.unc) text += "  (" + d.unc + ")";
+        text += d.ready ? "  — " + fmt(d.free) + " free of " + fmt(d.total) : "  — not available";
+        og.appendChild(new Option(text, d.letter));
+      }
+      sel.appendChild(og);
+    }
+    if (!sel.options.length) sel.appendChild(new Option(error ? "Error: " + error : "No drives found", ""));
+    sel.value = settings.drive || "";
+  }
+
+  $("#drive").addEventListener("change", (e) => {
+    const d = drives.find((x) => x.letter === e.target.value);
+    settings.drive = e.target.value;
+    if (d) { settings.unc = d.unc || ""; settings.driveType = d.type; settings.driveLabel = d.label || ""; }
+    save();
+  });
+  $("#btnReload").addEventListener("click", () => {
+    $("#drive").innerHTML = '<option value="">Scanning…</option>';
+    sendToPlugin({ cmd: "listDrives" });
+    sendToPlugin({ cmd: "refresh" });
+  });
+
+  // ---------------------------------------------------------------- generic bindings
+  function fillForm() {
+    $$("[data-key]").forEach((el) => {
+      const k = el.dataset.key, v = settings[k];
+      if (el.type === "checkbox") el.checked = v === true || v === "true";
+      else el.value = v ?? "";
+      if (el.type === "range") el.nextElementSibling.textContent = el.value;
+    });
+    $$("[data-color]").forEach((wrap) => {
+      const k = wrap.dataset.color, v = (settings[k] || "#000000").toUpperCase();
+      wrap.querySelector("input[type=color]").value = v.length === 7 ? v : "#000000";
+      wrap.querySelector(".hex").value = v;
+    });
+    // font
+    const known = [...$("#fontPick").options].some((o) => o.value === settings.fontFamily);
+    $("#fontPick").value = known ? settings.fontFamily : "__custom";
+    $("#fontCustom").value = known ? "" : settings.fontFamily;
+    $("#rowFontCustom").classList.toggle("hidden", known);
+    if (drives.length) $("#drive").value = settings.drive || "";
+    updateVisibility();
+  }
+
+  function updateVisibility() {
+    const custom = settings.source === "custom";
+    $("#rowDrive").classList.toggle("hidden", custom);
+    $("#rowCustom").classList.toggle("hidden", !custom);
+    $("#hintCustom").classList.toggle("hidden", !custom);
+    $$(".thrUnit").forEach((u) => (u.textContent = settings.thresholdUnit === "gb" ? "GB" : "%"));
+    const vc = document.querySelector('[data-color="valueColor"]');
+    if (vc) vc.style.opacity = settings.valueColorMode === "fixed" ? "1" : "0.35";
+  }
+
+  $$("[data-key]").forEach((el) => {
+    const ev = el.type === "range" || el.type === "text" || el.type === "number" ? "input" : "change";
+    el.addEventListener(ev, () => {
+      const k = el.dataset.key;
+      if (el.type === "checkbox") settings[k] = el.checked;
+      else if (el.type === "range" || el.type === "number") settings[k] = Number(el.value);
+      else settings[k] = el.value;
+      if (el.type === "range") el.nextElementSibling.textContent = el.value;
+      updateVisibility();
+      el.type === "range" || el.type === "text" || el.type === "number" ? saveSoon() : save();
+    });
+  });
+
+  function buildColorControls() {
+    $$("[data-color]").forEach((wrap) => {
+      if (wrap.childElementCount) return;
+      const k = wrap.dataset.color;
+      const pick = document.createElement("input"); pick.type = "color";
+      const hex = document.createElement("input"); hex.type = "text"; hex.className = "hex"; hex.spellcheck = false;
+      wrap.append(pick, hex);
+      pick.addEventListener("input", () => { hex.value = pick.value.toUpperCase(); settings[k] = hex.value; saveSoon(); });
+      hex.addEventListener("input", () => {
+        let v = hex.value.trim(); if (v && v[0] !== "#") v = "#" + v;
+        if (/^#[0-9a-fA-F]{6}$/.test(v)) { pick.value = v; settings[k] = v.toUpperCase(); saveSoon(); }
+      });
+    });
+  }
+
+  $("#preset").addEventListener("change", (e) => {
+    const p = PRESETS[e.target.value]; if (!p) return;
+    Object.assign(settings, p); e.target.value = ""; fillForm(); save();
+  });
+
+  $("#fontPick").addEventListener("change", (e) => {
+    const custom = e.target.value === "__custom";
+    $("#rowFontCustom").classList.toggle("hidden", !custom);
+    if (!custom) { settings.fontFamily = e.target.value; save(); }
+    else $("#fontCustom").focus();
+  });
+  $("#fontCustom").addEventListener("input", (e) => {
+    if (e.target.value.trim()) { settings.fontFamily = e.target.value.trim(); saveSoon(); }
+  });
+</script>
+</body>
+</html>

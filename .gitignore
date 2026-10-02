@@ -1,0 +1,13 @@
+# Node.js
+node_modules/
+
+# Build output (bin/drive-worker.ps1 is source and IS committed)
+*.sdPlugin/bin/plugin.js
+*.sdPlugin/bin/plugin.js.map
+*.sdPlugin/bin/package.json
+*.sdPlugin/logs
+dist/
+tools/out/
+
+# Claude Code local settings (machine-specific tool permissions)
+.claude/settings.local.json

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "Drive Gauge",
+  "Version": "1.0.0.0",
+  "Author": "Dez",
+  "Description": "Free/used space for local AND mapped network drives (or any UNC share), drawn as a ring, arc, pie, bar or plain text with your own fonts and colours.",
+  "Category": "Drive Gauge",
+  "CategoryIcon": "imgs/plugin/category-icon",
+  "Icon": "imgs/plugin/marketplace",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.6"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20"
+  },
+  "UUID": "com.dez.drivegauge",
+  "Actions": [
+    {
+      "Name": "Drive",
+      "UUID": "com.dez.drivegauge.drive",
+      "Icon": "imgs/actions/drive/icon",
+      "Tooltip": "Shows free/used space for a local drive, mapped network drive or UNC share.",
+      "PropertyInspectorPath": "ui/drive.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/actions/drive/key",
+          "ShowTitle": true,
+          "TitleAlignment": "bottom"
+        }
+      ]
+    }
+  ]
+}
